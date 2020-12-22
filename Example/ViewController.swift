@@ -191,7 +191,8 @@ extension ViewController {
             style.messageColor = UIColor.red
             style.messageAlignment = .center
             style.backgroundColor = UIColor.yellow
-            self.navigationController?.view.makeToast("This is a piece of toast with a custom style", duration: 3.0, position: .bottom, style: style)
+//            self.navigationController?.view.makeToast("This is a piece of toast with a custom style", duration: 3.0, position: .bottom, style: style)
+            self.navigationController?.view.makeSuccessToast(title: "请求失败!", message: "你的账号功能受限，无法完成此操作，如有疑问请联系客服。")
         case 6:
             // Show a custom view as toast
             let customView = UIView(frame: CGRect(x: 0.0, y: 0.0, width: 80.0, height: 400.0))
@@ -205,9 +206,9 @@ extension ViewController {
         case 8:
             // Make toast activity
             if !showingActivity {
-                self.navigationController?.view.makeToastActivity(.center)
+                self.navigationController?.view.startLoading()
             } else {
-                self.navigationController?.view.hideToastActivity()
+                self.navigationController?.view.endLoading()
             }
             
             showingActivity.toggle()

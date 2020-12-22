@@ -37,7 +37,11 @@ import ObjectiveC
  
  */
 public extension UIView {
-    
+    enum ContentAligment{
+        case topLeft
+        case centerLeft
+        case topCenter
+    }
     /**
      Keys used for associated objects.
      */
@@ -49,6 +53,8 @@ public extension UIView {
         static var activeToasts = "com.toast-swift.activeToasts"
         static var activityView = "com.toast-swift.activityView"
         static var queue        = "com.toast-swift.queue"
+        ///
+        static var activityBgView = "com.toast-swift.activityBgView"
     }
     
     /**
@@ -254,9 +260,18 @@ public extension UIView {
         // sanity
         guard objc_getAssociatedObject(self, &ToastKeys.activityView) as? UIView == nil else { return }
         
-        let toast = createToastActivityView()
+        let toast = createToastActivityView(nil)
         let point = position.centerPoint(forToast: toast, inSuperview: self)
         makeToastActivity(toast, point: point)
+    }
+    
+    func makeForeveryToastActivity(_ position: ToastPosition, _ title: String?) {
+        // sanity
+        guard objc_getAssociatedObject(self, &ToastKeys.activityView) as? UIView == nil else { return }
+        
+        let toast = createToastActivityView(title)
+        let point = position.centerPoint(forToast: toast, inSuperview: self)
+        makeForeveryToastActivity(toast, point: point)
     }
     
     /**
@@ -275,10 +290,16 @@ public extension UIView {
         // sanity
         guard objc_getAssociatedObject(self, &ToastKeys.activityView) as? UIView == nil else { return }
         
-        let toast = createToastActivityView()
+        let toast = createToastActivityView(nil)
         makeToastActivity(toast, point: point)
     }
-    
+    func makeForeveryToastActivity(_ point: CGPoint, _ title: String?) {
+        // sanity
+        guard objc_getAssociatedObject(self, &ToastKeys.activityView) as? UIView == nil else { return }
+        
+        let toast = createToastActivityView(title)
+        makeForeveryToastActivity(toast, point: point)
+    }
     /**
      Dismisses the active toast activity indicator view.
      */
@@ -290,6 +311,10 @@ public extension UIView {
                 toast.removeFromSuperview()
                 objc_setAssociatedObject(self, &ToastKeys.activityView, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
+        }
+        if let bgView = objc_getAssociatedObject(self, &ToastKeys.activityBgView) as? UIView{
+            bgView.removeFromSuperview()
+            objc_setAssociatedObject(self, &ToastKeys.activityBgView, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
     
@@ -307,11 +332,77 @@ public extension UIView {
             toast.alpha = 1.0
         })
     }
+    @objc private func doNothing(){
+        ///do nothing until task done
+        /// call hideToastActivity to hide
+    }
     
-    private func createToastActivityView() -> UIView {
+    //MARK: - toast activity forevery
+    private func makeForeveryToastActivity(_ toast: UIView, point: CGPoint) {
+        toast.alpha = 0.0
+        toast.center = point
+        
+        objc_setAssociatedObject(self, &ToastKeys.activityView, toast, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        
+        ///
+        let bgView = UIView(frame: self.bounds)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(doNothing))
+        bgView.addGestureRecognizer(tap)
+        objc_setAssociatedObject(self, &ToastKeys.activityBgView, bgView, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        
+        self.addSubview(bgView)
+        self.addSubview(toast)
+        
+        UIView.animate(withDuration: ToastManager.shared.style.fadeDuration, delay: 0.0, options: .curveEaseOut, animations: {
+            toast.alpha = 1.0
+        })
+    }
+    
+    private func createToastActivityView(_ title: String?) -> UIView {
         let style = ToastManager.shared.style
         
-        let activityView = UIView(frame: CGRect(x: 0.0, y: 0.0, width: style.activitySize.width, height: style.activitySize.height))
+        var viewRect = CGRect(x: 0.0, y: 0.0, width: style.activitySize.width, height: style.activitySize.height)
+        var activityIndicatorCenter = CGPoint(x: viewRect.width/2, y: viewRect.height/2)
+        var titleLabel: UILabel?
+        
+        if let title = title {
+            titleLabel = UILabel()
+            titleLabel?.numberOfLines = style.titleNumberOfLines
+            titleLabel?.font = style.titleFont
+            titleLabel?.textAlignment = style.titleAlignment
+            titleLabel?.lineBreakMode = .byTruncatingTail
+            titleLabel?.textColor = style.titleColor
+            titleLabel?.backgroundColor = UIColor.clear
+            titleLabel?.text = title;
+            
+            var maxTitleSize: CGSize = .zero
+            var titleLabelFrame: CGRect = .zero
+            
+            switch style.contentAligment {
+            case .topLeft, .centerLeft:
+                maxTitleSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - style.horizontalPadding*3 - style.activitySize.width, height: self.bounds.size.height * style.maxHeightPercentage)
+                let titleSize = titleLabel?.sizeThatFits(maxTitleSize) ?? .zero
+                let maxHeight = max(style.activitySize.height, 2*style.verticalPadding + titleSize.height)
+                let maxWidth = style.activitySize.width + style.horizontalPadding*3 + titleSize.width
+                viewRect = CGRect(x: 0.0, y: 0.0, width: maxWidth, height: maxHeight)
+                activityIndicatorCenter = CGPoint(x: style.horizontalPadding + style.activitySize.width/2, y: viewRect.height/2)
+                titleLabelFrame = CGRect(x: style.horizontalPadding*2 + style.activitySize.width, y: (maxHeight - titleSize.height)/2, width: titleSize.width, height: titleSize.height)
+                break
+            case .topCenter:
+                maxTitleSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - style.horizontalPadding*2, height: self.bounds.size.height * style.maxHeightPercentage)
+                let titleSize = titleLabel?.sizeThatFits(maxTitleSize) ?? .zero
+                let maxHeight = style.activitySize.height + 3*style.verticalPadding + titleSize.height
+                let maxWidth = max(style.activitySize.width, titleSize.width + 2*style.horizontalPadding)
+                viewRect = CGRect(x: 0.0, y: 0.0, width: maxWidth, height: maxHeight)
+                activityIndicatorCenter = CGPoint(x: viewRect.width/2, y: style.verticalPadding + style.activitySize.height/2)
+                titleLabelFrame = CGRect(x: (maxWidth - titleSize.width)/2, y: style.verticalPadding*2 + style.activitySize.height, width: titleSize.width, height: titleSize.height)
+                break
+            }
+            titleLabel?.frame = titleLabelFrame
+        }
+        
+        
+        let activityView = UIView(frame: viewRect)
         activityView.backgroundColor = style.activityBackgroundColor
         activityView.autoresizingMask = [.flexibleLeftMargin, .flexibleRightMargin, .flexibleTopMargin, .flexibleBottomMargin]
         activityView.layer.cornerRadius = style.cornerRadius
@@ -322,10 +413,29 @@ public extension UIView {
             activityView.layer.shadowRadius = style.shadowRadius
             activityView.layer.shadowOffset = style.shadowOffset
         }
+        let minLine = min(style.activitySize.width, style.activitySize.height)
+        var activityStyle: UIActivityIndicatorView.Style?
+        if minLine > 40.0{
+            if #available(iOS 13.0, *){
+                activityStyle = .large
+            }else{
+                activityStyle = .whiteLarge
+            }
+        }else{
+            if #available(iOS 13.0, *){
+                activityStyle = .medium
+            }else{
+                activityStyle = .white
+            }
+        }
         
-        let activityIndicatorView = UIActivityIndicatorView(style: .whiteLarge)
-        activityIndicatorView.center = CGPoint(x: activityView.bounds.size.width / 2.0, y: activityView.bounds.size.height / 2.0)
+        let activityIndicatorView = UIActivityIndicatorView(style: activityStyle!)
+        activityIndicatorView.color = style.activityColor
+        activityIndicatorView.center = activityIndicatorCenter
         activityView.addSubview(activityIndicatorView)
+        if let titleLabel = titleLabel{
+            activityView.addSubview(titleLabel)
+        }
         activityIndicatorView.color = style.activityIndicatorColor
         activityIndicatorView.startAnimating()
         
@@ -458,7 +568,14 @@ public extension UIView {
             titleLabel?.backgroundColor = UIColor.clear
             titleLabel?.text = title;
             
-            let maxTitleSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - imageRect.size.width, height: self.bounds.size.height * style.maxHeightPercentage)
+            var maxTitleSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - imageRect.size.width - style.horizontalPadding*3, height: self.bounds.size.height * style.maxHeightPercentage)
+            switch style.contentAligment {
+            case .topLeft, .centerLeft:
+                break
+            case .topCenter:
+                maxTitleSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage - style.horizontalPadding*2), height: self.bounds.size.height * style.maxHeightPercentage)
+                break
+            }
             let titleSize = titleLabel?.sizeThatFits(maxTitleSize)
             if let titleSize = titleSize {
                 titleLabel?.frame = CGRect(x: 0.0, y: 0.0, width: titleSize.width, height: titleSize.height)
@@ -475,7 +592,14 @@ public extension UIView {
             messageLabel?.textColor = style.messageColor
             messageLabel?.backgroundColor = UIColor.clear
             
-            let maxMessageSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - imageRect.size.width, height: self.bounds.size.height * style.maxHeightPercentage)
+            var maxMessageSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - imageRect.size.width - style.horizontalPadding*3, height: self.bounds.size.height * style.maxHeightPercentage)
+            switch style.contentAligment {
+            case .topCenter:
+                maxMessageSize = CGSize(width: (self.bounds.size.width * style.maxWidthPercentage) - style.horizontalPadding*2, height: self.bounds.size.height * style.maxHeightPercentage)
+                break
+            case .topLeft, .centerLeft:
+                break
+            }
             let messageSize = messageLabel?.sizeThatFits(maxMessageSize)
             if let messageSize = messageSize {
                 let actualWidth = min(messageSize.width, maxMessageSize.width)
@@ -489,6 +613,14 @@ public extension UIView {
         if let titleLabel = titleLabel {
             titleRect.origin.x = imageRect.origin.x + imageRect.size.width + style.horizontalPadding
             titleRect.origin.y = style.verticalPadding
+            switch style.contentAligment {
+            case .centerLeft, .topLeft:
+                break
+            case .topCenter:
+                titleRect.origin.x = style.horizontalPadding
+                titleRect.origin.y = style.verticalPadding*2 + imageRect.height
+                break
+            }
             titleRect.size.width = titleLabel.bounds.size.width
             titleRect.size.height = titleLabel.bounds.size.height
         }
@@ -498,14 +630,33 @@ public extension UIView {
         if let messageLabel = messageLabel {
             messageRect.origin.x = imageRect.origin.x + imageRect.size.width + style.horizontalPadding
             messageRect.origin.y = titleRect.origin.y + titleRect.size.height + style.verticalPadding
+            switch style.contentAligment {
+            case .centerLeft, .topLeft:
+                break
+            case .topCenter:
+                messageRect.origin.x = style.horizontalPadding
+                break
+            }
             messageRect.size.width = messageLabel.bounds.size.width
             messageRect.size.height = messageLabel.bounds.size.height
         }
         
         let longerWidth = max(titleRect.size.width, messageRect.size.width)
         let longerX = max(titleRect.origin.x, messageRect.origin.x)
-        let wrapperWidth = max((imageRect.size.width + (style.horizontalPadding * 2.0)), (longerX + longerWidth + style.horizontalPadding))
-        let wrapperHeight = max((messageRect.origin.y + messageRect.size.height + style.verticalPadding), (imageRect.size.height + (style.verticalPadding * 2.0)))
+        var wrapperWidth = max((imageRect.size.width + (style.horizontalPadding * 2.0)), (longerX + longerWidth + style.horizontalPadding))
+        var wrapperHeight = max((messageRect.origin.y + messageRect.size.height + style.verticalPadding), (imageRect.size.height + (style.verticalPadding * 2.0)))
+        switch style.contentAligment {
+        case .centerLeft:
+            imageRect.origin.y = (wrapperHeight - imageRect.height)/2
+            break
+        case .topLeft:
+            break
+        case .topCenter:
+            wrapperWidth = longerWidth + style.horizontalPadding*2
+            wrapperHeight = messageRect.origin.y + messageRect.size.height + style.verticalPadding
+            imageRect.origin.x = (wrapperWidth - imageRect.width)/2
+            break
+        }
         
         wrapperView.frame = CGRect(x: 0.0, y: 0.0, width: wrapperWidth, height: wrapperHeight)
         
@@ -522,6 +673,7 @@ public extension UIView {
         }
         
         if let imageView = imageView {
+            imageView.frame = imageRect
             wrapperView.addSubview(imageView)
         }
         
@@ -662,6 +814,12 @@ public struct ToastStyle {
     */
     public var shadowOffset = CGSize(width: 4.0, height: 4.0)
     
+    public var contentAligment = UIView.ContentAligment.topLeft{
+        didSet{
+            titleAlignment = (contentAligment == .topCenter) ? .center : .left
+            messageAlignment = (contentAligment == .topCenter) ? .center : .left
+        }
+    }
     /**
      The image size. The default is 80 x 80.
     */
@@ -672,6 +830,10 @@ public struct ToastStyle {
      Default is 100 x 100.
     */
     public var activitySize = CGSize(width: 100.0, height: 100.0)
+    
+    public var activityColor = UIColor.white
+    /// the content of activity view and titlelabel alignment, topLeft/centerLeft will be the same `centerLeft`
+    public var activityAlignment = UIView.ContentAligment.topCenter
     
     /**
      The fade in/out animation duration. Default is 0.2.
