@@ -413,7 +413,7 @@ public extension UIView {
             activityView.layer.shadowRadius = style.shadowRadius
             activityView.layer.shadowOffset = style.shadowOffset
         }
-        let minLine = min(style.activitySize.width, style.activitySize.height)
+        let minLine = style.contentAligment == .topCenter ? style.activitySize.height : style.activitySize.width
         var activityStyle: UIActivityIndicatorView.Style?
         if minLine > 40.0{
             if #available(iOS 13.0, *){
@@ -623,6 +623,17 @@ public extension UIView {
             }
             titleRect.size.width = titleLabel.bounds.size.width
             titleRect.size.height = titleLabel.bounds.size.height
+        }else if imageRect != .zero{
+            switch style.contentAligment {
+            case .centerLeft, .topLeft:
+                titleRect.origin.x = style.horizontalPadding + imageRect.width
+                titleRect.origin.y = style.verticalPadding
+                break
+            case .topCenter:
+                titleRect.origin.x = style.horizontalPadding
+                titleRect.origin.y = style.verticalPadding*2 + imageRect.height
+                break
+            }
         }
         
         var messageRect = CGRect.zero
@@ -639,6 +650,17 @@ public extension UIView {
             }
             messageRect.size.width = messageLabel.bounds.size.width
             messageRect.size.height = messageLabel.bounds.size.height
+        }else if imageRect != .zero{
+            switch style.contentAligment {
+            case .centerLeft, .topLeft:
+                messageRect.origin.x = imageRect.origin.x + imageRect.size.width + style.horizontalPadding
+                messageRect.origin.y = titleRect.origin.y + titleRect.size.height + style.verticalPadding
+                break
+            case .topCenter:
+                messageRect.origin.x = style.horizontalPadding
+                messageRect.origin.y = titleRect.origin.y + titleRect.size.height + style.verticalPadding
+                break
+            }
         }
         
         let longerWidth = max(titleRect.size.width, messageRect.size.width)
@@ -659,7 +681,26 @@ public extension UIView {
         }
         
         wrapperView.frame = CGRect(x: 0.0, y: 0.0, width: wrapperWidth, height: wrapperHeight)
-        
+
+        if titleRect.height != 0, messageRect.height == 0, imageRect != .zero{
+            switch style.contentAligment {
+            case .centerLeft:
+                titleRect.origin.y = wrapperHeight/2 - titleRect.height/2
+                break
+            default:
+                break
+            }
+        }
+        if messageRect.height != 0, titleRect.height == 0, imageRect != .zero{
+            switch style.contentAligment {
+            case .centerLeft:
+                messageRect.origin.y = wrapperHeight/2 - messageRect.height/2
+                break
+            default:
+                break
+            }
+        }
+  
         if let titleLabel = titleLabel {
             titleRect.size.width = longerWidth
             titleLabel.frame = titleRect
